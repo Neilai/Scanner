@@ -19,12 +19,10 @@ def _arp_scan(localip,localmac):
         IP = result_list[n][1][1].fields['psrc']  # 提取响应包，ARP头部中的['psrc']字段，这是IP地址
         MAC = result_list[n][1][1].fields['hwsrc']  # 提取响应包，ARP头部中的['hwsrc']字段，这是MAC地址
         print('IP地址: ' + IP + ' MAC地址: ' + MAC)
-
-
 if __name__ == "__main__":
     parser = optparse.OptionParser(version=VERSION)
-    parser.add_option("-ip",  dest="ip", help="source ip")
-    parser.add_option("-mac", dest="mac", help="souce mac")
+    parser.add_option("--ip",  dest="ip", help="source ip")
+    parser.add_option("--mac", dest="mac", help="souce mac")
     options, _ = parser.parse_args()
     if options.ip and options.mac:
         _arp_scan(options.ip,options.mac)
