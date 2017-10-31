@@ -13,7 +13,7 @@ def _arp_scan(localip,localmac):
         ip_list.append(ipno)  # 把IP地址添加到扫描清单
     #######################源MAC为本地MAC####目的MAC为广播#########操作码为1（请求）#######################################################由于多个网卡所以需要指派iface###########
     print "a"
-    result_raw = srp(Ether(src=localmac, dst='FF:FF:FF:FF:FF:FF')/ARP(op=1, hwsrc=localmac, hwdst='00:00:00:00:00:00',timeout=1, psrc=localip, pdst=ip_list))
+    result_raw = srp(Ether(src=localmac, dst='FF:FF:FF:FF:FF:FF')/ARP(op=1, hwsrc=localmac, hwdst='00:00:00:00:00:00', psrc=localip, pdst=ip_list,,timeout=1))
     print "b"
     result_list = result_raw[0].res #res: the list of packets，产生由收发数据包所组成的清单（list）
     IP_MAC_LIST = []
