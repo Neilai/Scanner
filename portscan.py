@@ -20,7 +20,6 @@ if __name__ == "__main__":
     parser.add_option("--port", dest="port", help="POST port")
     options, _ = parser.parse_args()
     if options.ip and options.port:
-        result = _scan_port(options.ip,options.port)
-        print "\nscan results: %s vulnerabilities found" % ("possible" if result else "no")
+        result = _scan_port(options.ip,(int)(options.port))
     else:
         parser.print_help()
