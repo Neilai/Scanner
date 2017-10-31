@@ -5,7 +5,7 @@ logging.getLogger("scapy.runtime").setLevel(logging.ERROR)#清除报错
 from scapy.all import *
 import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
 #配置各种信息，以便调用
-def _arp_scan(localip,localmac)
+def _arp_scan(localip,localmac):
     ip_list = []
     prefix = localip.split('.')
     for i in range(254):  # 0到253

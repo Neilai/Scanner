@@ -1,6 +1,6 @@
 from scapy.all import *
 import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
-def _scan_port(dst_ip,dst_port)
+def _scan_port(dst_ip,dst_port):
     src_port = RandShort()
     stealth_scan_resp = sr1(IP(dst=dst_ip)/TCP(sport=src_port,dport=dst_port,flags="S"),timeout=10)
     if(str(type(stealth_scan_resp))==""):
