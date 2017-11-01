@@ -97,7 +97,7 @@ def _scan_port(dst_ip,dst_port):
     global result_listbox
     result_listbox.delete(0, END)
     src_port = RandShort()
-    stealth_scan_resp = sr1(IP(dst=dst_ip)/TCP(sport=src_port,dport=dst_port,flags="S"),timeout=10)
+    stealth_scan_resp = sr1(IP(dst=dst_ip)/TCP(sport=src_port,dport=int(dst_port),flags="S"),timeout=10)
     _ip_scan(dst_ip)
     if(str(type(stealth_scan_resp))==""):
         result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Filtered")
