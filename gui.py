@@ -48,7 +48,7 @@ tcp_ip.grid(row=6,column=1,pady=5)
 tcp_port.grid(row=7,column=1,pady=5)
 # arp_list=Listbox(root,height=3)
 # arp_list.grid(row=2,column=3,padx=10,rowspan=2)
-tcp_button=Button(root,text="开始端口扫描",command = lambda : _scan_port(tcp_ip.get(),tcp_port.get()))
+tcp_button=Button(root,text="开始端口扫描",command = lambda : _scan_port(tcp_ip.get(),int(tcp_port.get())))
 tcp_button.grid(row=8,column=1,sticky=W)
 
 sql_title= Label(root,text = '应用层漏洞扫描',font=("",13))
@@ -97,7 +97,7 @@ def _scan_port(dst_ip,dst_port):
     global result_listbox
     result_listbox.delete(0, END)
     src_port = RandShort()
-    stealth_scan_resp = sr1(IP(dst=dst_ip)/TCP(sport=src_port,dport=int(dst_port),flags="S"),timeout=10)
+    stealth_scan_resp = sr1(IP(dst=dst_ip)/TCP(sport=src_port,dport=dst_port,flags="S"),timeout=10)
     _ip_scan(dst_ip)
     if(str(type(stealth_scan_resp))==""):
         result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Filtered")
