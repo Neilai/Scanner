@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser = optparse.OptionParser()
     parser.add_option("--ip",  dest="ip", help="dst ip")
     options, _ = parser.parse_args()
-    if options.ip and options.mac:
+    if options.ip:
         _ip_scan(options.ip)
     else:
         parser.print_help()
