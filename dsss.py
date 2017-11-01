@@ -12,7 +12,6 @@ TEXT, HTTPCODE, TITLE, HTML = xrange(4)                                         
 FUZZY_THRESHOLD = 0.95                                                              # ratio value in range (0,1) used for distinguishing True from False responses
 TIMEOUT = 30                                                                        # connection timeout in seconds
 RANDINT = random.randint(1, 255)                                                    # random integer value used across all tests
-
 BLOCKED_IP_REGEX = r"(?i)(\A|\b)IP\b.*\b(banned|blocked|bl(a|o)ck\s?list|firewall)" # regular expression used for recognition of generic firewall blocking messages
 DBMS_ERRORS = {                                                                     # regular expressions used for DBMS recognition based on error message response
     "MySQL": (r"SQL syntax.*MySQL", r"Warning.*mysql_.*", r"valid MySQL result", r"MySqlClient\."),
@@ -49,7 +48,7 @@ def scan_page(url, data=None):
             original, current = None, url if phase is GET else (data or "")
             for match in re.finditer(r"((\A|[?&])(?P<parameter>[^_]\w*)=)(?P<value>[^&#]+)", current):# 找到每一个参数
                 vulnerable, usable = False,True
-                print "* scanning %s parameter '%s'" % (phase,match.group("parameter"))
+                print "*scanning %s parameter '%s'" % (phase,match.group("parameter"))
                 original = original or (_retrieve_content(current, data) if phase is GET else _retrieve_content(url, current))#获取原始页面
                 tampered = current.replace(match.group(0), "%s%s" % (match.group(0), urllib.quote("".join(random.sample(TAMPER_SQL_CHAR_POOL, len(TAMPER_SQL_CHAR_POOL))))))#更改后缀
                 content = _retrieve_content(tampered, data) if phase is GET else _retrieve_content(url , tampered)
@@ -77,22 +76,18 @@ def scan_page(url, data=None):
     except KeyboardInterrupt:
         print "\r (x) Ctrl-C pressed"
     return retval
-
 def init_options(proxy=None, cookie=None, ua=None, referer=None):
-
-    globals()["_headers"] = dict(filter(lambda  _ : _[1] , ((COOKIE, cookie), (UA, ua or NAME), (REFERER , referer))))#筛选有值的参数
+    globals()["_headers"] = dict(filter(lambda  _ : _[1] , ((COOKIE, cookie.replace('"','')), (UA, ua or NAME), (REFERER , referer))))#筛选有值的参数
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler({'http': proxy})) if proxy else None)
-
 if __name__ == "__main__":
-
     print "%s #v%s\n by: %s\n" % (NAME, VERSION, AUTHOR)
     parser = optparse.OptionParser(version=VERSION)
     parser.add_option("-u", "--url", dest="url", help="Target URL (e.g. \"http://www.target.com/page.php?id=1\")")
     parser.add_option("--data", dest="data", help="POST data (e.g. \"query=test\")")
-    parser.add_option("--cookie", dest="cookie", help="HTTP Cookie header value")
-    parser.add_option("--user-agent", dest="ua", help="HTTP User-Agent header value")
-    parser.add_option("--referer", dest="referer", help="HTTP Referer header value")
-    parser.add_option("--proxy", dest="proxy", help="HTTP proxy address (e.g. \"http://127.0.0.1:8080\")")
+    parser.add_option("--cookie",dest="cookie", help="HTTP Cookie header value")
+    parser.add_option("--user-agent",dest="ua", help="HTTP User-Agent header value")
+    parser.add_option("--referer",dest="referer", help="HTTP Referer header value")
+    parser.add_option("--proxy",dest="proxy", help="HTTP proxy address (e.g. \"http://127.0.0.1:8080\")")
     options, _ = parser.parse_args()
     if options.url:
         init_options(options.proxy, options.cookie, options.ua, options.referer)
