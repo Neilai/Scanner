@@ -48,7 +48,7 @@ tcp_ip.grid(row=6,column=1,pady=5)
 tcp_port.grid(row=7,column=1,pady=5)
 # arp_list=Listbox(root,height=3)
 # arp_list.grid(row=2,column=3,padx=10,rowspan=2)
-tcp_button=Button(root,text="开始端口扫描")
+tcp_button=Button(root,text="开始端口扫描",command = lambda : _scan_port(tcp_ip.get(),tcp_port.get()))
 tcp_button.grid(row=8,column=1,sticky=W)
 
 sql_title= Label(root,text = '应用层漏洞扫描',font=("",13))
@@ -98,6 +98,7 @@ def _scan_port(dst_ip,dst_port):
     result_listbox.delete(0, END)
     src_port = RandShort()
     stealth_scan_resp = sr1(IP(dst=dst_ip)/TCP(sport=src_port,dport=dst_port,flags="S"),timeout=10)
+    _ip_scan(dst_ip)
     if(str(type(stealth_scan_resp))==""):
         result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Filtered")
     elif(stealth_scan_resp.haslayer(TCP)):
@@ -109,5 +110,17 @@ def _scan_port(dst_ip,dst_port):
     elif(stealth_scan_resp.haslayer(ICMP)):
         if(int(stealth_scan_resp.getlayer(ICMP).type)==3 and int(stealth_scan_resp.getlayer(ICMP).code) in [1,2,3,9,10,13]):
             result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Filtered")
+
+
+def _ip_scan(dstip):
+    a=sr1(IP(dst=dstip)/ICMP())
+    print "ttl is:"+str(a[IP].ttl)
+    if a:
+        if a[IP].ttl<=64:
+            result_listbox.insert(END,"host is Linux/unix")
+        else:
+            result_listbox.insert(END,"host is windows")
+    else:
+        result_listbox.insert(END,"sth error!!!may be filtered")
 
 mainloop()
