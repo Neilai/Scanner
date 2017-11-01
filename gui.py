@@ -286,7 +286,7 @@ def xss(url,data=None,cookie=None):
     global result_listbox
     result_listbox.delete(0, END)
     init_options(None, cookie, None, None)
-    result = scan_page(url if url.startswith("http") else "http://%s" % url,data)
+    result = scan_page_xss(url if url.startswith("http") else "http://%s" % url,data)
     result_listbox.insert(END,"scan results: %s vulnerabilities found" % ("possible" if result else "no"))
 
 mainloop()
