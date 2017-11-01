@@ -7,6 +7,31 @@ import logging
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)#清除报错
 from scapy.all import *
 import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
+
+NAME, VERSION, AUTHOR, LICENSE = " seu srtp sql scanner ", "0.2y", "Neil", "Public domain (FREE)"
+PREFIXES, SUFFIXES = (" ", ") ", "' ", "') "), ("", "-- -", "#", "%%16")            # prefix/suffix values used for building testing blind payloads
+TAMPER_SQL_CHAR_POOL = ('(', ')', '\'', '"',"'")                                        # characters used for SQL tampering/poisoning of parameter values
+BOOLEAN_TESTS = ("AND %d=%d", "OR NOT (%d>%d)")
+# boolean tests used for building testing blind payloads
+COOKIE, UA, REFERER = "Cookie", "User-Agent", "Referer"                             # optional HTTP header names
+GET, POST = "GET", "POST"                                                           # enumerator-like values used for marking current phase
+TEXT, HTTPCODE, TITLE, HTML = xrange(4)                                             # enumerator-like values used for marking content type
+FUZZY_THRESHOLD = 0.95                                                              # ratio value in range (0,1) used for distinguishing True from False responses
+TIMEOUT = 30                                                                        # connection timeout in seconds
+RANDINT = random.randint(1, 255)                                                    # random integer value used across all tests
+BLOCKED_IP_REGEX = r"(?i)(\A|\b)IP\b.*\b(banned|blocked|bl(a|o)ck\s?list|firewall)" # regular expression used for recognition of generic firewall blocking messages
+DBMS_ERRORS = {                                                                     # regular expressions used for DBMS recognition based on error message response
+    "MySQL": (r"SQL syntax.*MySQL", r"Warning.*mysql_.*", r"valid MySQL result", r"MySqlClient\."),
+    "PostgreSQL": (r"PostgreSQL.*ERROR", r"Warning.*\Wpg_.*", r"valid PostgreSQL result", r"Npgsql\."),
+    "Microsoft SQL Server": (r"Driver.* SQL[\-\_\ ]*Server", r"OLE DB.* SQL Server", r"(\W|\A)SQL Server.*Driver", r"Warning.*mssql_.*", r"(\W|\A)SQL Server.*[0-9a-fA-F]{8}", r"(?s)Exception.*\WSystem\.Data\.SqlClient\.", r"(?s)Exception.*\WRoadhouse\.Cms\."),
+    "Microsoft Access": (r"Microsoft Access Driver", r"JET Database Engine", r"Access Database Engine"),
+    "Oracle": (r"\bORA-[0-9][0-9][0-9][0-9]", r"Oracle error", r"Oracle.*Driver", r"Warning.*\Woci_.*", r"Warning.*\Wora_.*"),
+    "IBM DB2": (r"CLI Driver.*DB2", r"DB2 SQL error", r"\bdb2_\w+\("),
+    "SQLite": (r"SQLite/JDBCDriver", r"SQLite.Exception", r"System.Data.SQLite.SQLiteException", r"Warning.*sqlite_.*", r"Warning.*SQLite3::", r"\[SQLITE_ERROR\]"),
+    "Sybase": (r"(?i)Warning.*sybase.*", r"Sybase message", r"Sybase.*Server message.*"),
+}
+
+
 root=Tk()
 root.title("网络扫描器")
 root.geometry("500x420")
@@ -69,7 +94,7 @@ sql_post.grid(row=12,column=1,pady=5)
 sql_cookie.grid(row=13,column=1,pady=5)
 # arp_list=Listbox(root,height=3)
 # arp_list.grid(row=2,column=3,padx=10,rowspan=2)
-sql_button=Button(root,text="开始sql漏洞扫描")
+sql_button=Button(root,text="开始sql漏洞扫描",command = lambda : sql(sql_url.get(),sql_post.get(),sql_cookie.get()))
 xss_button=Button(root,text="开始xss漏洞扫描")
 xss_button.grid(row=15,column=1,sticky=W)
 sql_button.grid(row=14,column=1,sticky=W)
@@ -104,17 +129,17 @@ def _scan_port(dst_ip,dst_port):
     elif(stealth_scan_resp.haslayer(TCP)):
         if(stealth_scan_resp.getlayer(TCP).flags == 0x12):
             send_rst = sr(IP(dst=dst_ip)/TCP(sport=src_port,dport=dst_port,flags="R"),timeout=10)
-            result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Open")
+            result_listbox.insert(END," port"+str(dst_port)+" is Open")
         elif (stealth_scan_resp.getlayer(TCP).flags == 0x14):
-            result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Closed")
+            result_listbox.insert(END," port"+str(dst_port)+" is Closed")
     elif(stealth_scan_resp.haslayer(ICMP)):
         if(int(stealth_scan_resp.getlayer(ICMP).type)==3 and int(stealth_scan_resp.getlayer(ICMP).code) in [1,2,3,9,10,13]):
-            result_listbox.insert(END,str(dst_ip)+" port"+str(dst_port)+"Filtered")
+            result_listbox.insert(END,"port"+str(dst_port)+"is Filtered")
 
 
 def _ip_scan(dstip):
     a=sr1(IP(dst=dstip)/ICMP())
-    print "ttl is:"+str(a[IP].ttl)
+    result_listbox.insert("ttl is:"+str(a[IP].ttl))
     if a:
         if a[IP].ttl<=64:
             result_listbox.insert(END,"host is Linux/unix")
@@ -122,5 +147,71 @@ def _ip_scan(dstip):
             result_listbox.insert(END,"host is windows")
     else:
         result_listbox.insert(END,"sth error!!!may be filtered")
+
+
+def _retrieve_content(url, data=None):
+    retval = {HTTPCODE: httplib.OK}
+    try:
+        req = urllib2.Request("".join(url[_].replace(' ', "%20") if _ > url.find('?') else url[_]  for _ in xrange(len(url))), data, globals().get("_headers", {}))
+        retval[HTML] = urllib2.urlopen(req,timeout=TIMEOUT).read()
+    except Exception as ex:
+        retval[HTTPCODE] = getattr(ex,"code", None)
+        retval[HTML] = ex.read() if hasattr(ex, "read") else getattr(ex, "msg", "")
+    retval[HTML] = "" if re.search(BLOCKED_IP_REGEX, retval[HTML]) else retval[HTML]
+    retval[HTML] = re.sub(r"(?i)[^>]*(AND|OR)[^<]*%d[^<]*" % RANDINT, "__REFLECTED__",retval[HTML])
+    match = re.search(r"<title>(?P<result>[^<]+)</title>", retval[HTML], re.I)
+    retval[TITLE] = match.group("result") if match and "result" in match.groupdict() else None
+    retval[TEXT] = re.sub(r"(?si)<script.+?</script>|<!--.+?-->|<style.+?</style>|<[^>]+>|\s+", " ", retval[HTML])
+    return retval
+
+
+def scan_page(url, data=None):
+    retval, usable = False, False
+    url, data = re.sub(r"=(&|\Z)", "=1\g<1>", url) if url else url, re.sub(r"=(&|\Z)", "=1\g<1>", data) if data else data
+    try:
+        for phase in (GET, POST):
+            original, current = None, url if phase is GET else (data or "")
+            for match in re.finditer(r"((\A|[?&])(?P<parameter>[^_]\w*)=)(?P<value>[^&#]+)", current):# 找到每一个参数
+                vulnerable, usable = False,True
+                print "*scanning %s parameter '%s'" % (phase,match.group("parameter"))
+                original = original or (_retrieve_content(current, data) if phase is GET else _retrieve_content(url, current))#获取原始页面
+                tampered = current.replace(match.group(0), "%s%s" % (match.group(0), urllib.quote("".join(random.sample(TAMPER_SQL_CHAR_POOL, len(TAMPER_SQL_CHAR_POOL))))))#更改后缀
+                content = _retrieve_content(tampered, data) if phase is GET else _retrieve_content(url , tampered)
+                for (dbms, regex) in ((dbms, regex) for dbms in DBMS_ERRORS for regex in DBMS_ERRORS[dbms]):
+                    if not vulnerable and re.search(regex, content[HTML], re.I) and not re.search(regex, original[HTML], re.I):
+                        result_listbox.insert(END,"(i) %s parameter '%s' appears to be error SQLi vulnerable (%s)" % (phase, match.group("parameter"), dbms))#检查返回页面的错误
+                        retval = vulnerable = True
+                vulnerable = False
+                for prefix, boolean, suffix,inline_comment in itertools.product(PREFIXES, BOOLEAN_TESTS, SUFFIXES, (False,True)):#盲注,以及控制结果是真还是假
+                    if not vulnerable:
+                        template = ("%s%s%s" % (prefix, boolean, suffix)).replace(" " if inline_comment else "/**/", "/**/")#全部改为内联注释
+                        payloads = dict((_ , current.replace(match.group(0),"%s%s" % (match.group(0), urllib.quote(template % (RANDINT if _ else RANDINT + 1, RANDINT), safe='%')))) for _ in (True, False))#一个参数是真，一个参数是假
+                        contents = dict((_ , _retrieve_content(payloads[_], data) if phase is GET else _retrieve_content(url, payloads[_])) for _ in (False,True))
+                        if all(_[HTTPCODE] and _[HTTPCODE] < httplib.INTERNAL_SERVER_ERROR for _ in (original, contents[True], contents[False])):
+                            if any(original[_] == contents[True][_] != contents[False][_] for _ in (HTTPCODE, TITLE)):
+                                vulnerable = True
+                            else:
+                                ratios = dict((_, difflib.SequenceMatcher(None, original[TEXT], contents[_][TEXT]).quick_ratio()) for _ in (False, True))#找到条件为真假与原网页的差异。
+                                vulnerable = all(ratios.values()) and min(ratios.values()) < FUZZY_THRESHOLD < max(ratios.values()) and abs(ratios[True] - ratios[False]) > FUZZY_THRESHOLD / 10
+                        if vulnerable:
+                            result_listbox.insert(END," (i) %s parameter '%s' appears to be blind SQLi vulnerable (e.g.: '%s')" % (phase, match.group("parameter"), payloads[True]))
+                            retval = True
+        if not usable:
+            result_listbox.insert(END," (x) no usable GET/POST parameters found")
+    except KeyboardInterrupt:
+        print "\r (x) Ctrl-C pressed"
+    return retval
+
+def init_options(proxy=None, cookie=None, ua=None, referer=None):
+    globals()["_headers"] = dict(filter(lambda  _ : _[1] , ((COOKIE, cookie.replace('"','')), (UA, ua or NAME), (REFERER , referer))))#筛选有值的参数
+    urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler({'http': proxy})) if proxy else None)
+
+def sql(url,data=None,cookie=None):
+    global result_listbox
+    result_listbox.delete(0, END)
+    init_options(None, cookie, None, None)
+    result = scan_page(url if url.startswith("http") else "http://%s" % url,data)
+    result_listbox.insert(END,"scan results: %s vulnerabilities found" % ("possible" if result else "no"))
+
 
 mainloop()

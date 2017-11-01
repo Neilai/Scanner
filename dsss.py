@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 import scapy
 import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
-NAME, VERSION, AUTHOR, LICENSE = "Damn Small SQLi Scanner (DSSS) < 100 LoC (Lines of Code)", "0.2y", "Miroslav Stampar (@stamparm)", "Public domain (FREE)"
+NAME, VERSION, AUTHOR, LICENSE = " seu srtp sql scanner ", "0.2y", "Neil", "Public domain (FREE)"
 PREFIXES, SUFFIXES = (" ", ") ", "' ", "') "), ("", "-- -", "#", "%%16")            # prefix/suffix values used for building testing blind payloads
 TAMPER_SQL_CHAR_POOL = ('(', ')', '\'', '"',"'")                                        # characters used for SQL tampering/poisoning of parameter values
 BOOLEAN_TESTS = ("AND %d=%d", "OR NOT (%d>%d)")
