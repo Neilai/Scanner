@@ -7,7 +7,7 @@ import logging
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)#清除报错
 from scapy.all import *
 import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
-
+_headers = {}
 NAME, VERSION, AUTHOR, LICENSE = " seu srtp sql scanner ", "0.2y", "Neil", "Public domain (FREE)"
 PREFIXES, SUFFIXES = (" ", ") ", "' ", "') "), ("", "-- -", "#", "%%16")            # prefix/suffix values used for building testing blind payloads
 TAMPER_SQL_CHAR_POOL = ('(', ')', '\'', '"',"'")                                        # characters used for SQL tampering/poisoning of parameter values
@@ -20,6 +20,26 @@ FUZZY_THRESHOLD = 0.95                                                          
 TIMEOUT = 30                                                                        # connection timeout in seconds
 RANDINT = random.randint(1, 255)                                                    # random integer value used across all tests
 BLOCKED_IP_REGEX = r"(?i)(\A|\b)IP\b.*\b(banned|blocked|bl(a|o)ck\s?list|firewall)" # regular expression used for recognition of generic firewall blocking messages
+SMALLER_CHAR_POOL    = ('<', '>')                                                           # characters used for XSS tampering of parameter values (smaller set - for avoiding possible SQLi errors)
+LARGER_CHAR_POOL     = ('\'', '"', '>', '<', ';')                                           # characters used for XSS tampering of parameter values (larger set)
+DOM_FILTER_REGEX = r"(?s)<!--.*?-->|\bescape\([^)]+\)|\([^)]+==[^(]+\)|\"[^\"]+\"|'[^']+'"  # filtering regex used before DOM XSS search
+#在这里添加xss样式
+REGULAR_PATTERNS = (                                                                        # each (regular pattern) item consists of (r"context regex", (prerequisite unfiltered characters), "info text", r"content removal regex")
+    (r"\A[^<>]*%(chars)s[^<>]*\Z", ('<', '>'), "\".xss.\", pure text response, %(filtering)s filtering", None),#纯文本返回
+    (r"<!--[^>]*%(chars)s|%(chars)s[^<]*-->", ('<', '>'), "\"<!--.'.xss.'.-->\", inside the comment, %(filtering)s filtering", None),#嵌在评论里
+    (r"(?s)<script[^>]*>[^<]*?'[^<']*%(chars)s|%(chars)s[^<']*'[^<]*</script>", ('\'', ';'), "\"<script>.'.xss.'.</script>\", enclosed by <script> tags, inside single-quotes, %(filtering)s filtering", None),
+    (r'(?s)<script[^>]*>[^<]*?"[^<"]*%(chars)s|%(chars)s[^<"]*"[^<]*</script>', ('"', ';'), "'<script>.\".xss.\".</script>', enclosed by <script> tags, inside double-quotes, %(filtering)s filtering", None),
+    (r"(?s)<script[^>]*>[^<]*?%(chars)s|%(chars)s[^<]*</script>", (';',), "\"<script>.xss.</script>\", enclosed by <script> tags, %(filtering)s filtering", None),
+    (r">[^<]*%(chars)s[^<]*(<|\Z)", ('<', '>'), "\">.xss.<\", outside of tags, %(filtering)s filtering", r"(?s)<script.+?</script>|<!--.*?-->"),
+    (r"<[^>]*'[^>']*%(chars)s[^>']*'[^>]*>", ('\'',), "\"<.'.xss.'.>\", inside the tag, inside single-quotes, %(filtering)s filtering", r"(?s)<script.+?</script>|<!--.*?-->"),
+    (r'<[^>]*"[^>"]*%(chars)s[^>"]*"[^>]*>', ('"',), "'<.\".xss.\".>', inside the tag, inside double-quotes, %(filtering)s filtering", r"(?s)<script.+?</script>|<!--.*?-->"),
+    (r"<[^>]*%(chars)s[^>]*>", (), "\"<.xss.>\", inside the tag, outside of quotes, %(filtering)s filtering", r"(?s)<script.+?</script>|<!--.*?-->"),
+)
+DOM_PATTERNS = (                                                                            # each (dom pattern) item consists of r"recognition regex"
+    r"(?s)<script[^>]*>[^<]*?(var|\n)\s*(\w+)\s*=[^;]*(document\.(location|URL|documentURI)|location\.(href|search)|window\.location)[^;]*;[^<]*(document\.write(ln)?\(|\.innerHTML\s*=|eval\(|setTimeout\(|setInterval\(|location\.(replace|assign)\(|setAttribute\()[^;]*\2.*?</script>",
+    r"(?s)<script[^>]*>[^<]*?(document\.write\(|\.innerHTML\s*=|eval\(|setTimeout\(|setInterval\(|location\.(replace|assign)\(|setAttribute\()[^;]*(document\.(location|URL|documentURI)|location\.(href|search)|window\.location).*?</script>",
+)
+
 DBMS_ERRORS = {                                                                     # regular expressions used for DBMS recognition based on error message response
     "MySQL": (r"SQL syntax.*MySQL", r"Warning.*mysql_.*", r"valid MySQL result", r"MySqlClient\."),
     "PostgreSQL": (r"PostgreSQL.*ERROR", r"Warning.*\Wpg_.*", r"valid PostgreSQL result", r"Npgsql\."),
@@ -95,7 +115,7 @@ sql_cookie.grid(row=13,column=1,pady=5)
 # arp_list=Listbox(root,height=3)
 # arp_list.grid(row=2,column=3,padx=10,rowspan=2)
 sql_button=Button(root,text="开始sql漏洞扫描",command = lambda : sql(sql_url.get(),sql_post.get(),sql_cookie.get()))
-xss_button=Button(root,text="开始xss漏洞扫描")
+xss_button=Button(root,text="开始xss漏洞扫描",command = lambda : xss(sql_url.get(),sql_post.get(),sql_cookie.get()))
 xss_button.grid(row=15,column=1,sticky=W)
 sql_button.grid(row=14,column=1,sticky=W)
 
@@ -213,5 +233,60 @@ def sql(url,data=None,cookie=None):
     result = scan_page(url if url.startswith("http") else "http://%s" % url,data)
     result_listbox.insert(END,"scan results: %s vulnerabilities found" % ("possible" if result else "no"))
 
+
+def _retrieve_content_xss(url, data=None):
+    try:
+        req = urllib2.Request("".join(url[i].replace(' ', "%20") if i > url.find('?') else url[i] for i in xrange(len(url))), data, _headers)
+        retval = urllib2.urlopen(req, timeout=TIMEOUT).read()
+    except Exception, ex:
+        retval = ex.read() if hasattr(ex, "read") else getattr(ex, "msg", str())
+    return retval or ""
+
+def _contains(content, chars):
+    content = re.sub(r"\\[%s]" % re.escape("".join(chars)), "", content) if chars else content
+    return all(char in content for char in chars)
+
+
+def scan_page_xss(url, data=None):
+    retval, usable = False, False
+    url, data = re.sub(r"=(&|\Z)", "=1\g<1>", url) if url else url, re.sub(r"=(&|\Z)", "=1\g<1>", data) if data else data
+    original = re.sub(DOM_FILTER_REGEX, "", _retrieve_content_xss(url, data))
+    dom = max(re.search(_ ,original) for _ in DOM_PATTERNS)#检查 dom xss
+    if dom:
+        result_listbox.insert(END," (i) page itself appears to be XSS vulnerable (DOM)")
+        result_listbox.insert(END,"  (o) ...%s..." % dom.group(0))
+        retval = True
+    try:
+        for phase in (GET, POST):
+            current = url if phase is GET else (data or "")
+            for match in re.finditer(r"((\A|[?&])(?P<parameter>[\w\[\]]+)=)(?P<value>[^&#]*)", current):#匹配出参数
+                found, usable = False, True
+                result_listbox.insert(END,"* scanning %s parameter '%s'" % (phase, match.group("parameter")))
+                prefix, suffix = ("".join(random.sample(string.ascii_lowercase, PREFIX_SUFFIX_LENGTH)) for i in xrange(2))#随机产生字符串
+                for pool in (LARGER_CHAR_POOL, SMALLER_CHAR_POOL):
+                    if not found:
+                        tampered = current.replace(match.group(0), "%s%s" % (match.group(0), urllib.quote("%s%s%s%s" % ("'" if pool == LARGER_CHAR_POOL else "", prefix, "".join(random.sample(pool, len(pool))), suffix))))
+                        content = (_retrieve_content_xss(tampered, data) if phase is GET else _retrieve_content_xss(url, tampered)).replace("%s%s" % ("'" if pool == LARGER_CHAR_POOL else "", prefix), prefix)
+                        for sample in re.finditer("%s([^ ]+?)%s" % (prefix, suffix), content, re.I):#匹配字符串中间
+                            for regex, condition, info, content_removal_regex in REGULAR_PATTERNS:
+                                context = re.search(regex % {"chars": re.escape(sample.group(0))}, re.sub(content_removal_regex or "", "", content), re.I)#寻找到xss注入点
+                                if context and not found and sample.group(1).strip():
+                                    if _contains(sample.group(1), condition):#确定一些必须的字符没有过滤掉
+                                        result_listbox.insert(END," (i) %s parameter '%s' appears to be XSS vulnerable (%s)" % (phase, match.group("parameter"), info % dict((("filtering", "no" if all(char in sample.group(1) for char in LARGER_CHAR_POOL) else "some"),))))
+                                        found = retval = True
+                                    break
+
+        if not usable:
+            result_listbox.insert(END," (x) no usable GET/POST parameters found")
+    except KeyboardInterrupt:
+        print "\r (x) Ctrl-C pressed"
+    return retval
+
+def xss(url,data=None,cookie=None):
+    global result_listbox
+    result_listbox.delete(0, END)
+    init_options(None, cookie, None, None)
+    result = scan_page(url if url.startswith("http") else "http://%s" % url,data)
+    result_listbox.insert(END,"scan results: %s vulnerabilities found" % ("possible" if result else "no"))
 
 mainloop()
