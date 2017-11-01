@@ -6,8 +6,9 @@ from Tkinter import *
 import logging
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)#清除报错
 from scapy.all import *
-import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
+import string,difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse,cookielib,random
 _headers = {}
+PREFIX_SUFFIX_LENGTH = 5
 NAME, VERSION, AUTHOR, LICENSE = " seu srtp sql scanner ", "0.2y", "Neil", "Public domain (FREE)"
 PREFIXES, SUFFIXES = (" ", ") ", "' ", "') "), ("", "-- -", "#", "%%16")            # prefix/suffix values used for building testing blind payloads
 TAMPER_SQL_CHAR_POOL = ('(', ')', '\'', '"',"'")                                        # characters used for SQL tampering/poisoning of parameter values

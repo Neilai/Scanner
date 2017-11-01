@@ -1,6 +1,6 @@
 #--*-- coding:utf-8 --*--
 import cookielib, optparse, random, re, string, urllib, urllib2, urlparse
-NAME, VERSION, AUTHOR, LICENSE = "Damn Small XSS Scanner (DSXS) < 100 LoC (Lines of Code)", "0.2g", "Miroslav Stampar (@stamparm)", "Public domain (FREE)"
+NAME, VERSION, AUTHOR, LICENSE = "seu xss scannner", "0.2g", "Neil", "Public domain (FREE)"
 SMALLER_CHAR_POOL    = ('<', '>')                                                           # characters used for XSS tampering of parameter values (smaller set - for avoiding possible SQLi errors)
 LARGER_CHAR_POOL     = ('\'', '"', '>', '<', ';')                                           # characters used for XSS tampering of parameter values (larger set)
 GET, POST            = "GET", "POST"                                                        # enumerator-like values used for marking current phase
