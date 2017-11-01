@@ -223,7 +223,7 @@ def scan_page(url, data=None):
     return retval
 
 def init_options(proxy=None, cookie=None, ua=None, referer=None):
-    globals()["_headers"] = dict(filter(lambda  _ : _[1] , ((COOKIE, cookie.replace('"','')), (UA, ua or NAME), (REFERER , referer))))#筛选有值的参数
+    globals()["_headers"] = dict(filter(lambda  _ : _[1] , ((COOKIE, cookie), (UA, ua or NAME), (REFERER , referer))))#筛选有值的参数
     urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler({'http': proxy})) if proxy else None)
 
 def sql(url,data=None,cookie=None):
