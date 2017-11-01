@@ -17,7 +17,7 @@ def _scan_port(dst_ip,dst_port):
 if __name__ == "__main__":
     parser = optparse.OptionParser(version=VERSION)
     parser.add_option("--ip", dest="ip", help="Target ip")
-    parser.add_option("--port", dest="port", help="POST port")
+    parser.add_option("--port", dest="port", help="POST port",type=str)
     options, _ = parser.parse_args()
     if options.ip and options.port:
         result = _scan_port(options.ip,(int)(options.port))
