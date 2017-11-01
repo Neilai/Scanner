@@ -3,7 +3,7 @@ from scapy.all import *
 import difflib, httplib, itertools, optparse, random, re, urllib, urllib2, urlparse
 def _ip_scan(dstip):
     a=sr1(IP(dst=dstip)/ICMP())
-    print "ttl is:"+a[IP].ttl
+    print "ttl is:"+str(a[IP].ttl)
     if a:
         if a[IP].ttl<=64:
             print "host is Linux/unix"
